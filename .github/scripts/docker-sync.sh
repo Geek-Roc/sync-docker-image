@@ -68,6 +68,10 @@ platform_arch() {
   echo "${platform%%/*}"
 }
 
+platform_list() {
+  echo "$PLATFORMS" | tr ',' ' '
+}
+
 repo_name_from_source() {
   local repo="$1"
   repo="${repo%:*}"
@@ -88,7 +92,7 @@ copy_image() {
     return
   fi
 
-  for platform in $PLATFORMS; do
+  for platform in $(platform_list); do
     local os
     local arch
     local tmp

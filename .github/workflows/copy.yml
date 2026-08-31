@@ -20,7 +20,7 @@ on:
         required: true
         default: ''
       platforms:
-        description: '平台 (默认 -a 全平台；指定格式 linux/amd64 linux/arm64)'
+        description: '平台 (默认 -a 全平台；指定格式 linux/amd64,linux/arm64)'
         required: false
         default: '-a'
 
