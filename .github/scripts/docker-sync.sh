@@ -5,7 +5,7 @@ set -euo pipefail
 SKOPEO_IMAGE="${SKOPEO_IMAGE:-quay.io/skopeo/stable:latest}"
 AUTH_DIR="${RUNNER_TEMP:-/tmp}/skopeo-auth"
 AUTH_FILE="${AUTH_DIR}/auth.json"
-PLATFORMS="${PLATFORMS:-linux/amd64 linux/arm64}"
+PLATFORMS="${PLATFORMS:--a}"
 
 exec_skopeo() {
   mkdir -p "$AUTH_DIR"
@@ -78,6 +78,15 @@ copy_image() {
   local src="$1"
   local dst="$2"
   local copied_refs=""
+
+  if [ "$PLATFORMS" = "-a" ]; then
+    echo "Copy ${src} to ${dst} (all platforms)"
+    if ! exec_skopeo copy -a "docker://${src}" "docker://${dst}"; then
+      echo "::error::Copy ${src} to ${dst} failed"
+      return 1
+    fi
+    return
+  fi
 
   for platform in $PLATFORMS; do
     local os
