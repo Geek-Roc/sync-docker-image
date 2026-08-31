@@ -10,13 +10,24 @@ PLATFORMS=(
 )
 
 REGCTL_IMAGE="${REGCTL_IMAGE:-ghcr.io/regclient/regctl:latest}"
-REGCTL=(docker run --rm -v "${HOME}/.docker:/home/nonroot/.docker:ro" "${REGCTL_IMAGE}")
+REGCTL=(
+  docker run --rm
+  -e HOME=/home/nonroot
+  -e DOCKER_CONFIG=/home/nonroot/.docker
+  -v "${HOME}/.docker:/home/nonroot/.docker:ro"
+  "${REGCTL_IMAGE}"
+)
 
 login() {
   local registry="$1"
   local credential="$2"
+  local required="${3:-false}"
 
   if [ -z "$credential" ] || [[ "$credential" != *:* ]]; then
+    if [ "$required" = "true" ]; then
+      echo "::error::Missing or invalid credential for ${registry}. Set DESTINATION_CREDENTIAL as <Username>:<Password> in GitHub Actions secrets."
+      return 1
+    fi
     return
   fi
 
@@ -24,6 +35,10 @@ login() {
   local password="${credential#*:}"
 
   if [ -z "$username" ] || [ -z "$password" ]; then
+    if [ "$required" = "true" ]; then
+      echo "::error::Missing username or password for ${registry}. Set DESTINATION_CREDENTIAL as <Username>:<Password> in GitHub Actions secrets."
+      return 1
+    fi
     return
   fi
 
@@ -135,7 +150,7 @@ main() {
   docker pull "$REGCTL_IMAGE"
 
   login "$SOURCE" "${SOURCE_CREDENTIAL:-}"
-  login "$DESTINATION" "${DESTINATION_CREDENTIAL:-}"
+  login "$DESTINATION" "${DESTINATION_CREDENTIAL:-}" true
 
   if [ -n "${COPY:-}" ]; then
     run_with_lines "$COPY" copy_one
