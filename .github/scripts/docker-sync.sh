@@ -3,16 +3,17 @@
 set -euo pipefail
 
 SKOPEO_IMAGE="${SKOPEO_IMAGE:-quay.io/skopeo/stable:latest}"
-AUTH_FILE="${RUNNER_TEMP:-/tmp}/containers-auth.json"
+AUTH_DIR="${RUNNER_TEMP:-/tmp}/skopeo-auth"
+AUTH_FILE="${AUTH_DIR}/auth.json"
 
 exec_skopeo() {
-  mkdir -p "$(dirname "$AUTH_FILE")"
+  mkdir -p "$AUTH_DIR"
   if [ ! -s "$AUTH_FILE" ]; then
     printf '{}\n' > "$AUTH_FILE"
   fi
   docker run --rm -i \
-    -v "${AUTH_FILE}:/auth.json" \
-    -e REGISTRY_AUTH_FILE=/auth.json \
+    -v "${AUTH_DIR}:/auth" \
+    -e REGISTRY_AUTH_FILE=/auth/auth.json \
     "$SKOPEO_IMAGE" "$@"
 }
 
