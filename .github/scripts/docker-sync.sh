@@ -7,7 +7,9 @@ AUTH_FILE="${RUNNER_TEMP:-/tmp}/containers-auth.json"
 
 exec_skopeo() {
   mkdir -p "$(dirname "$AUTH_FILE")"
-  touch "$AUTH_FILE"
+  if [ ! -s "$AUTH_FILE" ]; then
+    printf '{}\n' > "$AUTH_FILE"
+  fi
   docker run --rm -i \
     -v "${AUTH_FILE}:/auth.json" \
     -e REGISTRY_AUTH_FILE=/auth.json \
