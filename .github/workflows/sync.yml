@@ -24,11 +24,15 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
     - name: Sync Docker Images
-      uses: ikrong/docker-sync-action@main
-      with:
-        source: ${{ github.event.inputs.source }}
-        source-credential: ${{ secrets.SOURCE_CREDENTIAL }}
-        destination: ${{ github.event.inputs.destination }}
-        destination-credential: ${{ secrets.DESTINATION_CREDENTIAL }}
-        sync: "${{ github.event.inputs.source_repo }} ${{ github.event.inputs.destination_scope }}"
+      shell: bash
+      env:
+        SOURCE: ${{ github.event.inputs.source }}
+        SOURCE_CREDENTIAL: ${{ secrets.SOURCE_CREDENTIAL }}
+        DESTINATION: ${{ github.event.inputs.destination }}
+        DESTINATION_CREDENTIAL: ${{ secrets.DESTINATION_CREDENTIAL }}
+        SYNC: "${{ github.event.inputs.source_repo }} ${{ github.event.inputs.destination_scope }}"
+      run: bash .github/scripts/docker-sync.sh
