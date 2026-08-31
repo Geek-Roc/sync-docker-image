@@ -5,6 +5,7 @@ set -euo pipefail
 SKOPEO_IMAGE="${SKOPEO_IMAGE:-quay.io/skopeo/stable:latest}"
 AUTH_DIR="${RUNNER_TEMP:-/tmp}/skopeo-auth"
 AUTH_FILE="${AUTH_DIR}/auth.json"
+PLATFORMS="${PLATFORMS:-linux/amd64 linux/arm64}"
 
 exec_skopeo() {
   mkdir -p "$AUTH_DIR"
@@ -46,6 +47,64 @@ login() {
     echo "::error::Login to ${registry} failed"
     return 1
   fi
+
+  if ! echo "$password" | docker login "$registry" -u "$username" --password-stdin; then
+    echo "::error::Docker login to ${registry} failed"
+    return 1
+  fi
+}
+
+platform_tag() {
+  echo "${1//\//-}"
+}
+
+platform_os() {
+  echo "${1%%/*}"
+}
+
+platform_arch() {
+  local platform="$1"
+  platform="${platform#*/}"
+  echo "${platform%%/*}"
+}
+
+repo_name_from_source() {
+  local repo="$1"
+  repo="${repo%:*}"
+  echo "${repo##*/}"
+}
+
+copy_image() {
+  local src="$1"
+  local dst="$2"
+  local copied_refs=""
+
+  for platform in $PLATFORMS; do
+    local os
+    local arch
+    local tmp
+    os="$(platform_os "$platform")"
+    arch="$(platform_arch "$platform")"
+    tmp="${dst}-$(platform_tag "$platform")"
+
+    echo "Copy ${src} (${platform}) to ${tmp}"
+    if ! exec_skopeo copy \
+      --override-os "$os" \
+      --override-arch "$arch" \
+      "docker://${src}" \
+      "docker://${tmp}"; then
+      echo "::error::Copy ${src} (${platform}) to ${tmp} failed"
+      return 1
+    fi
+
+    copied_refs="${copied_refs} ${tmp}"
+  done
+
+  echo "Create manifest list ${dst}"
+  if ! docker buildx imagetools create -t "$dst" $copied_refs; then
+    echo "::error::Create manifest list ${dst} failed"
+    return 1
+  fi
 }
 
 copy_one() {
@@ -64,7 +123,7 @@ copy_one() {
   local dst="${DESTINATION}/${dst_arg}"
 
   echo "::group::Copy ${src} to ${dst}"
-  if ! exec_skopeo copy "docker://${src}" "docker://${dst}"; then
+  if ! copy_image "$src" "$dst"; then
     echo "::error::Copy ${src} to ${dst} failed"
     echo "::endgroup::"
     return 1
@@ -85,11 +144,28 @@ sync_one() {
   fi
 
   echo "::group::Sync ${SOURCE}/${src_repo} to ${DESTINATION}/${dst_scope}"
-  if ! exec_skopeo sync --src docker --dest docker "${SOURCE}/${src_repo}" "${DESTINATION}/${dst_scope}"; then
-    echo "::error::Sync ${SOURCE}/${src_repo} to ${DESTINATION}/${dst_scope} failed"
+  local dst_repo
+  local tags
+  dst_repo="$(repo_name_from_source "$src_repo")"
+  if ! tags="$(exec_skopeo list-tags "docker://${SOURCE}/${src_repo}" | jq -r '.Tags[]')"; then
+    echo "::error::List tags for ${SOURCE}/${src_repo} failed"
     echo "::endgroup::"
     return 1
   fi
+
+  while IFS= read -r tag; do
+    if [ -z "$tag" ]; then
+      continue
+    fi
+
+    if ! copy_image \
+      "${SOURCE}/${src_repo}:${tag}" \
+      "${DESTINATION}/${dst_scope}/${dst_repo}:${tag}"; then
+      echo "::error::Sync ${SOURCE}/${src_repo}:${tag} failed"
+      echo "::endgroup::"
+      return 1
+    fi
+  done <<< "$tags"
   echo "::endgroup::"
 }
 
@@ -108,6 +184,8 @@ main() {
   echo "::group::Pull skopeo"
   docker pull "$SKOPEO_IMAGE"
   docker -v
+  docker buildx version
+  jq --version
   exec_skopeo --version
   echo "::endgroup::"
 
